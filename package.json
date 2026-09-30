@@ -1,0 +1,13 @@
+{
+  "name": "asyk-atu",
+  "version": "1.0.0",
+  "description": "Цифровая 3D-версия казахской игры Асық ату",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve .",
+    "dev": "npx serve ."
+  },
+  "keywords": ["asyk", "казахская игра", "three.js", "matter.js"],
+  "author": "Narxoz Incubator participant",
+  "license": "MIT"
+}

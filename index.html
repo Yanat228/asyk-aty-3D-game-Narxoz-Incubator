@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Асық Ату — Цифровая версия</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a0a00; font-family: 'Inter', system-ui, sans-serif; touch-action: none; }
+    #game-container { position: relative; width: 100%; height: 100%; }
+    canvas { display: block; width: 100%; height: 100%; }
+    
+    /* UI Overlay */
+    #ui {
+      position: absolute; inset: 0; pointer-events: none; z-index: 10;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .hud {
+      pointer-events: auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 100%);
+      flex-wrap: wrap;
+    }
+    .hud-left {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .score-box, .level-box, .attempts-box {
+      background: rgba(139, 69, 19, 0.9);
+      border: 2px solid #DAA520;
+      border-radius: 12px;
+      padding: 8px 12px;
+      color: #FFD700;
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+      white-space: nowrap;
+    }
+    .stars { color: #FFD700; letter-spacing: 2px; }
+
+    .ingame-btns {
+      pointer-events: auto;
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+    .ingame-btns button {
+      background: rgba(20, 10, 0, 0.85);
+      border: 2px solid #DAA520;
+      color: #FFD700;
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      line-height: 1.2;
+    }
+    .ingame-btns button:active { transform: scale(0.96); }
+    .ingame-btns.hidden { display: none !important; }
+
+    /* Power meter — слабый / средний / сильный */
+    #power-bar-container {
+      position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
+      width: min(280px, 80vw);
+      opacity: 0; transition: opacity 0.15s; pointer-events: none;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      z-index: 25;
+    }
+    #power-bar-container.show { opacity: 1; }
+    .power-labels {
+      display: flex; justify-content: space-between; width: 100%;
+      font-size: 11px; font-weight: 700; color: #FFD700;
+      text-shadow: 0 1px 3px #000;
+    }
+    .power-track {
+      width: 100%; height: 16px;
+      background: rgba(0,0,0,0.55);
+      border: 2px solid #DAA520;
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+    }
+    .power-track::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, #22c55e 0%, #22c55e 33%, #eab308 33%, #eab308 66%, #ef4444 66%, #ef4444 100%);
+      opacity: 0.25;
+    }
+    #power-bar {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+      border-radius: 8px;
+      position: relative; z-index: 1;
+      transition: none; /* мгновенно следует за ползунком */
+    }
+    #power-bar::after {
+      content: '';
+      position: absolute;
+      right: -3px; top: -3px; bottom: -3px;
+      width: 6px;
+      background: #fff;
+      border-radius: 3px;
+      box-shadow: 0 0 8px #FFD700, 0 0 2px #000;
+    }
+    
+    
+    /* Screens */
+    .screen {
+      position: absolute; inset: 0; background: rgba(20, 8, 0, 0.92);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 50; pointer-events: auto; padding: 20px; text-align: center;
+      opacity: 0; visibility: hidden; transition: opacity 0.35s, visibility 0.35s;
+    }
+    .screen.active { opacity: 1; visibility: visible; }
+    
+    .screen h1 {
+      font-family: 'Press Start 2P', cursive;
+      font-size: clamp(18px, 5vw, 28px);
+      color: #FFD700;
+      text-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 3px 3px 0 #8B4513;
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+    .screen p { color: #f5e6c8; max-width: 420px; margin-bottom: 16px; font-size: 15px; line-height: 1.5; }
+    
+    .btn {
+      background: linear-gradient(180deg, #DAA520 0%, #B8860B 100%);
+      border: none; border-radius: 14px; padding: 14px 32px;
+      font-size: 16px; font-weight: 800; color: #1a0a00;
+      cursor: pointer; box-shadow: 0 6px 0 #8B4513, 0 8px 20px rgba(0,0,0,0.4);
+      transition: transform 0.1s, box-shadow 0.1s;
+      font-family: inherit; margin: 6px;
+    }
+    .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #8B4513; }
+    .btn.secondary { background: linear-gradient(180deg, #8B4513 0%, #5c2e0a 100%); color: #FFD700; box-shadow: 0 6px 0 #3d1c05; }
+
+    /* Hide game HUD when a menu screen is open */
+    body.menu-open .hud,
+    body.menu-open #power-bar-container,
+    body.menu-open .ingame-btns,
+    body.menu-open #turn-banner { opacity: 0 !important; pointer-events: none !important; visibility: hidden; }
+
+    .menu-panel {
+      width: min(420px, 94vw);
+      background: linear-gradient(160deg, rgba(40,18,4,0.92), rgba(20,8,0,0.95));
+      border: 2px solid rgba(218,165,32,0.55);
+      border-radius: 24px;
+      padding: 22px 20px 18px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,215,0,0.12);
+      backdrop-filter: blur(8px);
+    }
+    .menu-panel .tagline {
+      color: #e8d5a8;
+      font-size: 13px;
+      line-height: 1.45;
+      margin: 0 0 14px;
+      opacity: 0.9;
+    }
+    .menu-play {
+      width: 100%;
+      margin: 10px 0 14px !important;
+      font-size: 18px !important;
+      padding: 16px 24px !important;
+      letter-spacing: 0.5px;
+    }
+    .menu-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      width: 100%;
+    }
+    .menu-grid .btn {
+      margin: 0;
+      width: 100%;
+      padding: 12px 10px;
+      font-size: 13px;
+      border-radius: 12px;
+    }
+    .menu-grid .btn.wide {
+      grid-column: 1 / -1;
+    }
+    .menu-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(218,165,32,0.25);
+      flex-wrap: wrap;
+    }
+    .menu-footer .coins {
+      color: #FFD700;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .shop-tabs { display:flex; gap:8px; justify-content:center; margin:8px 0; }
+    .upgrade-row {
+      background: rgba(0,0,0,0.35); border: 1px solid #8B6914; border-radius: 14px;
+      padding: 12px 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+    }
+    .upgrade-row .info { flex: 1; }
+    .upgrade-row .title { color: #FFD700; font-weight: 800; font-size: 14px; }
+    .upgrade-row .desc { color: #c4a882; font-size: 11px; margin-top: 2px; }
+    .upgrade-row .lvl { color: #f5e6c8; font-size: 12px; margin-top: 4px; }
+    .upgrade-row button { margin: 0; padding: 10px 14px; font-size: 12px; white-space: nowrap; }
+    .alshy-track-wrap { width: min(340px, 90vw); margin: 16px auto; }
+    .alshy-track {
+      position: relative; height: 28px; border-radius: 14px; overflow: hidden;
+      background: linear-gradient(90deg, #4b5563, #6b7280 30%, #22c55e 42%, #22c55e 58%, #6b7280 70%, #4b5563);
+      border: 2px solid #DAA520; box-shadow: inset 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .alshy-zone {
+      position: absolute; top: 0; bottom: 0; left: 42%; width: 16%;
+      background: rgba(34,197,94,0.35); border-left: 2px solid #86efac; border-right: 2px solid #86efac;
+    }
+    .alshy-needle {
+      position: absolute; top: -4px; bottom: -4px; width: 4px; left: 0%;
+      background: #fff; border-radius: 2px; box-shadow: 0 0 10px #FFD700, 0 0 4px #000;
+    }
+    .alshy-labels { display:flex; justify-content:space-between; font-size:11px; color:#DAA520; margin-top:6px; font-weight:700; }
+    .alshy-popup {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      pointer-events: none; z-index: 80; opacity: 0; transition: opacity 0.25s;
+    }
+    .alshy-popup.show { opacity: 1; }
+    
+    #tutorial .step { max-width: 420px; }
+    #tutorial.practice-mode .step {
+      position: absolute; top: 10px; right: 10px; left: auto; transform: none;
+      bottom: auto;
+      background: rgba(20,8,0,0.95); border: 2px solid #DAA520; border-radius: 14px;
+      padding: 10px 12px; width: min(260px, 42vw);
+      pointer-events: auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      z-index: 60;
+      text-align: left;
+    }
+    #tutorial.practice-mode .step h2 { font-size: 14px !important; margin-bottom: 6px !important; }
+    #tutorial.practice-mode .step p { font-size: 12px !important; margin-bottom: 8px !important; line-height: 1.35 !important; }
+    #tutorial.practice-mode .step .btn { padding: 8px 12px; font-size: 12px; margin: 0; }
+    #tutorial.practice-mode {
+      background: transparent;
+      pointer-events: none;
+      align-items: flex-start;
+      justify-content: flex-start;
+      padding: 0;
+    }
+    #tutorial.practice-mode .step button { pointer-events: auto; }
+    #meme-overlay { z-index: 90 !important; }
+    .screen { z-index: 95; }
+    #tutorial { z-index: 96; }
+    .menu-grid .btn.wide-half { grid-column: span 1; }
+
+.alshy-popup-inner {
+      background: linear-gradient(180deg, #fbbf24, #b45309); color: #1a0a00;
+      font-weight: 900; font-size: 28px; padding: 18px 36px; border-radius: 20px;
+      box-shadow: 0 0 40px rgba(251,191,36,0.6); animation: alshy-pop 0.5s ease;
+    }
+    @keyframes alshy-pop {
+      0% { transform: scale(0.4) rotate(-8deg); opacity: 0; }
+      60% { transform: scale(1.15) rotate(3deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+
+    .menu-footer .user-chip {
+      margin: 0;
+      font-size: 12px;
+      color: #c4a882;
+      text-align: right;
+      flex: 1;
+    }
+    .mode-row { margin: 0 0 8px; }
+    .nick-row { margin: 0 0 4px; max-width: none; }
+    .nick-row input { width: 100%; }
+    #start-screen h1 { margin-bottom: 8px; }
+    @media (max-width: 420px) {
+      .menu-grid .btn { font-size: 12px; padding: 11px 8px; }
+      .menu-panel { padding: 16px 14px; }
+    }
+
+    
+    /* Level select */
+    #levels-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+      max-width: 340px; margin: 20px auto;
+    }
+    .level-card {
+      background: rgba(139, 69, 19, 0.7);
+      border: 2px solid #DAA520;
+      border-radius: 16px; padding: 16px 8px;
+      cursor: pointer; transition: transform 0.15s, background 0.15s;
+      min-height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .level-card:hover:not(.locked) { transform: scale(1.05); background: rgba(218, 165, 32, 0.3); }
+    .level-card.locked { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.6); }
+    .level-card .num { font-size: 22px; font-weight: 800; color: #FFD700; }
+    .level-card .stars-small { font-size: 14px; margin-top: 4px; }
+
+    .skin-card {
+      background: rgba(139, 69, 19, 0.75);
+      border: 2px solid #DAA520;
+      border-radius: 14px; padding: 14px 10px;
+      cursor: pointer; transition: transform 0.15s;
+      min-height: 110px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 6px;
+    }
+    .skin-card:hover { transform: scale(1.04); }
+    .skin-card.owned { border-color: #22c55e; }
+    .skin-card.active { box-shadow: 0 0 0 3px #FFD700; }
+    .skin-preview {
+      width: 48px; height: 36px; border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .skin-name { font-size: 13px; color: #FFD700; font-weight: 700; }
+    .skin-price { font-size: 12px; color: #f5e6c8; }
+    
+    /* Tutorial overlay */
+    #tutorial {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.75);
+      z-index: 40; display: none; flex-direction: column; align-items: center; justify-content: center;
+      pointer-events: auto; padding: 24px; text-align: center;
+    }
+    #tutorial.show { display: flex; }
+    #tutorial .step { max-width: 360px; color: #fff; }
+    #tutorial h2 { color: #FFD700; margin-bottom: 12px; font-size: 20px; }
+    #tutorial p { margin-bottom: 20px; line-height: 1.5; }
+    
+    /* Hint toast */
+    #hint {
+      position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.85); color: #FFD700; padding: 10px 20px;
+      border-radius: 20px; border: 1px solid #DAA520; font-size: 14px;
+      opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap;
+      z-index: 30;
+    }
+    #hint.show { opacity: 1; }
+    
+    /* SpongeBob meme overlay */
+    #meme-overlay {
+      position: absolute; inset: 0; z-index: 100; pointer-events: none;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; visibility: hidden; transition: opacity 0.2s;
+    }
+    #meme-overlay.show { opacity: 1; visibility: visible; }
+    #meme-img {
+      max-width: 72vmin; max-height: 72vmin;
+      animation: spin-zoom 3s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+      filter: drop-shadow(0 0 40px rgba(255,215,0,0.95));
+    }
+    @keyframes spin-zoom {
+      0%   { transform: scale(0.15) rotate(0deg); opacity: 0; }
+      20%  { opacity: 1; transform: scale(1.15) rotate(360deg); }
+      45%  { transform: scale(1.05) rotate(720deg); }
+      70%  { transform: scale(1) rotate(900deg); opacity: 1; }
+      85%  { transform: scale(1) rotate(1080deg); opacity: 1; }
+      100% { transform: scale(1) rotate(1080deg); opacity: 0; }
+    }
+    
+    /* Result screen */
+
+    #result-stars {
+      display: flex; justify-content: center; gap: 12px;
+      margin: 18px 0; min-height: 56px;
+    }
+    #result-stars .star {
+      font-size: 48px; line-height: 1;
+      color: #444;
+      text-shadow: none;
+      transform: scale(0.5);
+      opacity: 0.35;
+      transition: all 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+    }
+    #result-stars .star.on {
+      color: #FFD700;
+      opacity: 1;
+      transform: scale(1);
+      text-shadow: 0 0 12px #FFD700, 0 0 28px #f59e0b, 0 0 40px rgba(255,200,0,0.6);
+      animation: star-pop 0.55s ease-out forwards;
+    }
+    @keyframes star-pop {
+      0% { transform: scale(0.2) rotate(-20deg); }
+      60% { transform: scale(1.25) rotate(8deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+    .mode-row { display: flex; gap: 10px; justify-content: center; margin: 12px 0; flex-wrap: wrap; }
+    .mode-btn {
+      background: rgba(139,69,19,0.6); border: 2px solid #8B6914;
+      color: #f5e6c8; border-radius: 12px; padding: 10px 18px;
+      font-weight: 700; cursor: pointer; font-family: inherit; font-size: 14px;
+    }
+    .mode-btn.active { border-color: #FFD700; background: rgba(218,165,32,0.35); color: #FFD700; }
+    .nick-row { display: flex; flex-direction: column; gap: 8px; max-width: 280px; margin: 10px auto; }
+    .nick-row input {
+      background: rgba(0,0,0,0.4); border: 2px solid #DAA520; border-radius: 10px;
+      padding: 10px 14px; color: #FFD700; font-size: 15px; font-family: inherit; text-align: center;
+    }
+    .nick-row input::placeholder { color: #a08050; }
+    .turn-banner {
+      pointer-events: none;
+      position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.75); border: 2px solid #DAA520; border-radius: 14px;
+      padding: 8px 20px; color: #FFD700; font-weight: 800; font-size: 15px;
+      opacity: 0; transition: opacity 0.3s; z-index: 20; white-space: nowrap;
+    }
+    .turn-banner.show { opacity: 1; }
+    .vs-score {
+      font-size: 14px; color: #f5e6c8; margin-top: 8px;
+    }
+
+    .auth-box { max-width: 320px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
+    .auth-box input {
+      background: rgba(0,0,0,0.4); border: 2px solid #DAA520; border-radius: 10px;
+      padding: 10px 14px; color: #FFD700; font-size: 14px; font-family: inherit; text-align: center;
+    }
+    .auth-status { font-size: 13px; color: #DAA520; margin: 6px 0; min-height: 18px; }
+    .auth-error { color: #f87171; font-size: 13px; min-height: 18px; }
+    .history-list, .records-list {
+      max-width: 360px; margin: 12px auto; max-height: 50vh; overflow-y: auto;
+      text-align: left; width: 100%;
+    }
+    .history-item, .record-item {
+      background: rgba(0,0,0,0.35); border: 1px solid #8B6914; border-radius: 10px;
+      padding: 10px 12px; margin-bottom: 8px; color: #f5e6c8; font-size: 13px;
+    }
+    .history-item b, .record-item b { color: #FFD700; }
+    .user-chip {
+      font-size: 12px; color: #FFD700; margin-top: 8px;
+    }
+
+
+    
+    /* Ornament pattern background helper */
+    .ornament-bg {
+      background-color: #6b1a1a;
+      background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 40c0-11 9-20 20-20s20 9 20 20-9 20-20 20-20-9-20-20zm10 0c0 5.5 4.5 10 10 10s10-4.5 10-10-4.5-10-10-10-10 4.5-10 10z' fill='%23c9a227' fill-opacity='0.15'/%3E%3C/svg%3E");
+    }
+    
+    /* Mobile tweaks */
+    @media (max-width: 500px) {
+      .score-box, .level-box, .attempts-box { font-size: 12px; padding: 6px 10px; }
+      #levels-grid { gap: 8px; }
+      .level-card { min-height: 70px; padding: 10px 4px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="c"></canvas>
+    
+    <div id="ui">
+      <div class="hud">
+        <div class="hud-left">
+          <div class="level-box">Уровень <span id="lvl-num">1</span></div>
+          <div class="score-box">Очки: <span id="score">0</span> / <span id="target">3</span></div>
+          <div class="attempts-box">Броски: <span id="attempts">5</span></div>
+        </div>
+        <div class="ingame-btns hidden" id="ingame-btns">
+          <button id="btn-restart" type="button">↻ Заново</button>
+          <button id="btn-to-menu" type="button">☰ Меню</button>
+        </div>
+      </div>
+      <div id="power-bar-container">
+        <div class="power-labels"><span>Слабый</span><span>Средний</span><span>Сильный</span></div>
+        <div class="power-track"><div id="power-bar"></div></div>
+        
+      </div>
+    </div>
+    
+    <!-- Start Screen -->
+    <div id="start-screen" class="screen">
+      <div class="menu-panel">
+        <h1>АСЫҚ АТУ</h1>
+        <p class="tagline">Прицелься, потяни и выбей асыки за золотую границу</p>
+        <div class="mode-row">
+          <button type="button" class="mode-btn active" id="mode-1p" data-mode="1">1 игрок</button>
+          <button type="button" class="mode-btn" id="mode-2p" data-mode="2">2 игрока</button>
+        </div>
+        <div class="nick-row" id="nick-row">
+          <input id="nick1" maxlength="14" placeholder="Игрок 1" value="Игрок 1" />
+          <input id="nick2" maxlength="14" placeholder="Игрок 2" value="Игрок 2" style="display:none" />
+        </div>
+        <button class="btn menu-play" id="btn-play">▶ Играть</button>
+        <div class="menu-grid">
+          <button class="btn secondary" id="btn-levels">Уровни</button>
+          <button class="btn secondary" id="btn-shop">Мастерская</button>
+          <button class="btn secondary" id="btn-records">Рекорды</button>
+          <button class="btn secondary" id="btn-history">История</button>
+          <button class="btn secondary" id="btn-tutorial">Обучение</button>
+          <button class="btn secondary" id="btn-guide">Гайд</button>
+          <button class="btn secondary wide" id="btn-auth">Вход / Регистрация</button>
+        </div>
+        <div class="menu-footer">
+          <span class="coins">🪙 <span id="coins-display">0</span> · 💎 <span id="gems-display">0</span></span>
+          <span class="user-chip" id="user-chip">Гость</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Levels Screen -->
+    <div id="levels-screen" class="screen">
+      <h1>Уровни</h1>
+      <div id="levels-grid"></div>
+      <button class="btn secondary" id="btn-back-levels">Назад</button>
+    </div>
+    
+    <!-- How to play -->
+    <div id="how-screen" class="screen">
+      <h1>Как играть</h1>
+      <p style="text-align:left; max-width:380px;">
+        1. Зажми <b>сақа</b> и тяни — это направление броска.<br><br>
+        2. Ползунок силы бегает сам: <b>Слабый → Средний → Сильный</b>. Отпусти кнопку в нужный момент.<br><br>
+        3. Асык выбит, если ушёл за <b>золотую границу</b>.<br><br>
+        4. Набери очки за ограниченные броски. С 7 уровня — препятствия (дерево/камень) на поле.<br><br>
+        5. Всего 12 уровней с растущей сложностью.
+      </p>
+      <button class="btn" id="btn-back-how">Понятно</button>
+    </div>
+
+    <!-- Shop Screen -->
+    <div id="shop-screen" class="screen">
+      <h1>Мастерская</h1>
+      <p style="color:#FFD700;font-weight:700;margin-bottom:8px;">🪙 Тиын: <span id="shop-coins">0</span> · 💎 Тенге: <span id="shop-gems">0</span></p>
+      <p style="font-size:12px;color:#c4a882;margin-bottom:8px;">Тиын — только с алшы. Тенге — донат, для скинов.</p>
+      <div class="shop-tabs">
+        <button type="button" class="mode-btn active" id="tab-upgrades">Прокачка</button>
+        <button type="button" class="mode-btn" id="tab-skins">Скины</button>
+      </div>
+      <div id="upgrades-panel" style="max-width:380px;width:100%;margin:12px auto;text-align:left;"></div>
+      <div id="shop-grid" style="display:none;grid-template-columns:repeat(2,1fr);gap:12px;max-width:360px;margin:16px auto;"></div>
+      <button class="btn secondary" id="btn-donate" style="margin-top:8px;">💎 Донат +200 тенге (тест)</button>
+      <button class="btn secondary" id="btn-back-shop">Назад</button>
+    </div>
+
+    <!-- 2P Alshy duel -->
+    <div id="alshy-duel-screen" class="screen">
+      <h1>Кто первый?</h1>
+      <p id="alshy-duel-text">Попади ползунком в зону <b>АЛШЫ</b></p>
+      <p id="alshy-duel-player" style="color:#FFD700;font-weight:800;font-size:18px;margin:8px 0;"></p>
+      <div class="alshy-track-wrap">
+        <div class="alshy-track" id="alshy-track">
+          <div class="alshy-zone" id="alshy-zone"></div>
+          <div class="alshy-needle" id="alshy-needle"></div>
+        </div>
+        <div class="alshy-labels"><span>Түк</span><span>АЛШЫ</span><span>Бүк</span></div>
+      </div>
+      <button class="btn menu-play" id="btn-alshy-stop">стоп!</button>
+      <p id="alshy-duel-result" style="min-height:24px;margin-top:10px;color:#f5e6c8;"></p>
+    </div>
+
+    <!-- Alshy popup -->
+    <div id="alshy-popup" class="alshy-popup">
+      <div class="alshy-popup-inner">АЛШЫ! +10 тиын</div>
+    </div>
+    
+    <!-- Result Screen -->
+    <div id="result-screen" class="screen">
+      <h1 id="result-title">Победа!</h1>
+      <div id="result-stars">
+        <span class="star" data-i="0">★</span>
+        <span class="star" data-i="1">★</span>
+        <span class="star" data-i="2">★</span>
+      </div>
+      <p id="result-text">Отличная меткость!</p>
+      <p class="vs-score" id="vs-score" style="display:none"></p>
+      <button class="btn" id="btn-next">Следующий уровень</button>
+      <button class="btn secondary" id="btn-retry">Ещё раз</button>
+      <button class="btn secondary" id="btn-menu">В меню</button>
+    </div>
+    
+
+
+    <!-- Tutorial choice -->
+    <div id="tutorial-choice-screen" class="screen">
+      <h1>Обучение</h1>
+      <p>Первый раз в игре?<br>Можно пройти короткое обучение или сразу к уровням.</p>
+      <button class="btn" id="btn-do-tutorial">Пройти обучение</button>
+      <button class="btn secondary" id="btn-skip-tutorial">Пропустить</button>
+    </div>
+
+
+    <div id="guide-screen" class="screen">
+      <h1>Гайд</h1>
+      <div style="text-align:left;max-width:400px;max-height:55vh;overflow-y:auto;color:#f5e6c8;font-size:14px;line-height:1.5;">
+        <p><b style="color:#FFD700">Как бросать</b><br>
+        Зажми сақа → тяни для направления → ползунок силы бегает → отпусти в нужный момент.</p>
+        <p><b style="color:#FFD700">Очки</b><br>
+        1 асык за золотой круг = 1 очко. Набери цель уровня.</p>
+        <p><b style="color:#FFD700">Алшы и тиын 🪙</b><br>
+        После броска сақа крутится. Если остановился гранью <b>алшы</b> — +10 тиын.
+        Тиын <b>нельзя</b> купить донатом — только из игры.</p>
+        <p><b style="color:#FFD700">Мастерская</b><br>
+        <b>Прокачка</b> (за тиын): сила, точность, прочность (ломка преград), размер.<br>
+        <b>Скины</b> (за тенге 💎): только внешний вид, без бафов.</p>
+        <p><b style="color:#FFD700">Тенге 💎</b><br>
+        Донатная валюта. Только для покупки скинов.</p>
+        <p><b style="color:#FFD700">2 игрока</b><br>
+        Сначала дуэль на алшы (ползунок) — кто начинает. Потом игра по очереди.</p>
+      </div>
+      <button class="btn secondary" id="btn-back-guide">Назад</button>
+    </div>
+
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="screen active">
+      <h1>Аккаунт</h1>
+      <p id="auth-mode-label">Войди, чтобы сохранять прогресс и рекорды</p>
+      <div class="auth-box">
+        <input id="auth-name" placeholder="Имя (при регистрации)" style="display:none" />
+        <input id="auth-email" type="email" placeholder="Email" autocomplete="username" />
+        <input id="auth-pass" type="password" placeholder="Пароль" autocomplete="current-password" />
+        <p class="auth-error" id="auth-error"></p>
+        <button class="btn" id="btn-auth-submit">Войти</button>
+        <button class="btn secondary" id="btn-auth-toggle">Нет аккаунта? Регистрация</button>
+        <button class="btn secondary" id="btn-auth-logout" style="display:none">Выйти</button>
+        <button class="btn secondary" id="btn-auth-guest">Играть как гость</button>
+      </div>
+      <p class="auth-status" id="auth-cloud-status"></p>
+    </div>
+
+    <!-- Records Screen -->
+    <div id="records-screen" class="screen">
+      <h1>Личные рекорды</h1>
+      <p>Лучший результат по каждому уровню</p>
+      <div class="records-list" id="records-list"></div>
+      <button class="btn secondary" id="btn-back-records">Назад</button>
+    </div>
+
+    <!-- History Screen -->
+    <div id="history-screen" class="screen">
+      <h1>История</h1>
+      <p>Последние партии</p>
+      <div class="history-list" id="history-list"></div>
+      <button class="btn secondary" id="btn-back-history">Назад</button>
+    </div>
+
+    <!-- Tutorial -->
+    <div id="tutorial">
+      <div class="step" id="tut-step">
+        <h2>Добро пожаловать!</h2>
+        <p>Потяни сақа (жёлтый асык внизу) назад пальцем или мышкой, затем отпусти. Чем сильнее потянешь — тем дальше полетит.</p>
+        <button class="btn" id="tut-next">Дальше</button>
+      </div>
+    </div>
+    
+    <div id="hint">Подсказка</div>
+    
+    <!-- Meme overlay -->
+    <div id="meme-overlay">
+      <img id="meme-img" src="" alt="SpongeBob is Proud to be KAZAKH" />
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
